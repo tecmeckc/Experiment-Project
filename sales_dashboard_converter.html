@@ -1,0 +1,151 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Enhanced Data Visualizer</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: linear-gradient(to right, #dbe9f4, #edf6fb);
+      backdrop-filter: blur(10px);
+      min-height: 100vh;
+    }
+    .upload-section {
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 15px;
+      padding: 20px;
+      max-width: 500px;
+      margin: auto;
+      text-align: center;
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    .chart-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 30px;
+      padding-top: 40px;
+    }
+    .chart {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 20px;
+      padding: 20px;
+      width: 40%;
+      min-width: 350px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    h2 {
+      text-align: center;
+      color: #013a63;
+    }
+  </style>
+</head>
+<body>
+  <h2>Enhanced Data Visualizer</h2>
+  <div class="upload-section">
+    <label for="dataFile">Upload JSON / CSV / XLSX:</label><br><br>
+    <input type="file" id="dataFile" />
+  </div>
+  <div id="dashboard" class="chart-container"></div>
+
+  <script>
+    document.getElementById("dataFile").addEventListener("change", function(event) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      const fileName = file.name.toLowerCase();
+
+      if (fileName.endsWith(".json")) {
+        reader.onload = e => {
+          const jsonData = JSON.parse(e.target.result);
+          generateEnhancedDashboard(Array.isArray(jsonData) ? jsonData : [jsonData]);
+        };
+        reader.readAsText(file);
+      } else if (fileName.endsWith(".csv")) {
+        reader.onload = e => {
+          const text = e.target.result;
+          const rows = text.split(/\r?\n/).filter(row => row.trim().length > 0);
+          const headers = rows[0].split(",");
+          const jsonData = rows.slice(1).map(row => {
+            const values = row.split(",");
+            return headers.reduce((obj, key, index) => {
+              obj[key.trim()] = values[index]?.trim();
+              return obj;
+            }, {});
+          });
+          generateEnhancedDashboard(jsonData);
+        };
+        reader.readAsText(file);
+      } else if (fileName.endsWith(".xlsx")) {
+        reader.onload = e => {
+          const workbook = XLSX.read(e.target.result, { type: "binary" });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(sheet);
+          generateEnhancedDashboard(jsonData);
+        };
+        reader.readAsBinaryString(file);
+      } else {
+        alert("Unsupported file format. Please upload a JSON, CSV, or XLSX file.");
+      }
+    });
+
+    function generateEnhancedDashboard(data) {
+      const container = document.getElementById("dashboard");
+      container.innerHTML = "";
+
+      if (!data.length) return;
+
+      const keys = Object.keys(data[0]);
+
+      keys.forEach(key => {
+        const values = data.map(d => d[key]).filter(Boolean);
+        const numeric = values.every(val => !isNaN(parseFloat(val)) && isFinite(val));
+
+        const div = document.createElement("div");
+        div.className = "chart";
+        container.appendChild(div);
+
+        if (numeric) {
+          // Show histogram
+          Plotly.newPlot(div, [{
+            x: values.map(Number),
+            type: "histogram",
+            marker: { color: "#0ea5e9" }
+          }], {
+            title: `Histogram of ${key}`,
+            xaxis: { title: key },
+            yaxis: { title: "Frequency" }
+          });
+        } else {
+          const counts = {};
+          values.forEach(val => {
+            counts[val] = (counts[val] || 0) + 1;
+          });
+          const labels = Object.keys(counts);
+          const countsValues = Object.values(counts);
+
+          // Create pie chart or donut chart depending on # of categories
+          Plotly.newPlot(div, [{
+            labels: labels,
+            values: countsValues,
+            type: "pie",
+            hole: labels.length > 3 ? 0.4 : 0, // Donut for more categories
+            textinfo: "label+percent"
+          }], {
+            title: `${labels.length > 3 ? "Donut" : "Pie"} Chart: ${key}`
+          });
+        }
+      });
+    }
+  </script>
+</body>
+</html>
